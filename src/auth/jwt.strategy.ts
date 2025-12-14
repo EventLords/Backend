@@ -1,3 +1,4 @@
+// jwt.strategy.ts
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -13,8 +14,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: any) {
     return {
-      id: payload.id,
+      id: payload.sub, // ← acest câmp EXISTĂ în req.user
       role: payload.role,
+      isApproved: payload.isApproved,
     };
   }
 }

@@ -1,20 +1,26 @@
 import {
+  Injectable,
   CanActivate,
   ExecutionContext,
   ForbiddenException,
-  Injectable,
 } from '@nestjs/common';
-
+import { Reflector } from '@nestjs/core';
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private roles: string[]) {}
+  constructor(private reflector: Reflector) {}
 
-  canActivate(context: ExecutionContext) {
-    const request = context.switchToHttp().getRequest();
-    const user = request.user;
+  canActivate(context: ExecutionContext): boolean {
+    const requiredRoles = this.reflector.get<string[]>(
+      'roles',
+      context.getHandler(),
+    );
 
-    if (!user || !this.roles.includes(user.role)) {
-      throw new ForbiddenException('Nu ai permisiunea necesară.');
+    if (!requiredRoles) return true;
+
+    const { user } = context.switchToHttp().getRequest();
+
+    if (!user || !requiredRoles.includes(user.role)) {
+      throw new ForbiddenException('Nu ai permisiunea necesară');
     }
 
     return true;

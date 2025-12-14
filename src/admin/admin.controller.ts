@@ -1,34 +1,29 @@
 import { Controller, Get, Patch, Param, UseGuards } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { AdminService } from './admin.service';
 
 @Controller('admin')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class AdminController {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly adminService: AdminService) {}
 
-  @UseGuards(JwtAuthGuard, new RolesGuard(['ADMIN']))
-  @Get('pending-organizers')
-  async getPendingOrganizers() {
-    return this.prisma.users.findMany({
-      where: { role: 'ORGANIZER', isApproved: false },
-    });
+  @Get('events/pending')
+  @Roles('ADMIN')
+  getPendingEvents() {
+    return this.adminService.getPendingEvents();
   }
 
-  @UseGuards(JwtAuthGuard, new RolesGuard(['ADMIN']))
-  @Patch('approve-organizer/:id')
-  async approveOrganizer(@Param('id') id: string) {
-    return this.prisma.users.update({
-      where: { id_user: Number(id) },
-      data: { isApproved: true },
-    });
+  @Patch('events/:id/approve')
+  @Roles('ADMIN')
+  approveEvent(@Param('id') id: string) {
+    return this.adminService.approveEvent(Number(id));
   }
 
-  @UseGuards(JwtAuthGuard, new RolesGuard(['ADMIN']))
-  @Patch('reject-organizer/:id')
-  async rejectOrganizer(@Param('id') id: string) {
-    return this.prisma.users.delete({
-      where: { id_user: Number(id) },
-    });
+  @Patch('events/:id/reject')
+  @Roles('ADMIN')
+  rejectEvent(@Param('id') id: string) {
+    return this.adminService.rejectEvent(Number(id));
   }
 }
