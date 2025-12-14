@@ -151,26 +151,27 @@ export class AuthService {
       );
     }
 
-    // 4. dacă este student neaprobat → blocăm login-ul
+    // STUDENT neaprobat? → blocăm login-ul
     if (user.role === 'STUDENT' && !user.isApproved) {
       throw new BadRequestException(
         'Contul tău de student nu a fost aprobat încă.',
       );
     }
 
-    // ADMIN poate intra oricând
-
-    // 5. generăm token JWT
-    const token = await this.jwtService.signAsync({
-      id: user.id_user,
+    // 4. generăm token JWT corect
+    const payload = {
+      sub: user.id_user, // standard JWT subject
       role: user.role,
-    });
+      isApproved: user.isApproved,
+    };
+
+    const token = await this.jwtService.signAsync(payload);
 
     return {
       message: 'Autentificare reușită.',
       token,
       user: {
-        id: user.id_user,
+        id_user: user.id_user,
         email: user.email,
         role: user.role,
         firstName: user.first_name,
