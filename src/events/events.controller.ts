@@ -16,6 +16,7 @@ import { UpdateEventDto } from './dto/update-event.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { Query } from '@nestjs/common';
 
 @Controller('events')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -68,12 +69,43 @@ export class EventsController {
 
   // STUDENT / PUBLIC
   @Get()
-  listActiveEvents() {
-    return this.eventsService.listActiveEvents();
+  listActiveEvents(
+    @Query('facultyId') facultyId?: string,
+    @Query('typeId') typeId?: string,
+    @Query('organizerId') organizerId?: string,
+    @Query('search') search?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.eventsService.listActiveEvents({
+      facultyId,
+      typeId,
+      organizerId,
+      search,
+      dateFrom,
+      dateTo,
+    });
   }
+
   @Get('organizer/archived')
   @Roles('ORGANIZER')
   getMyArchivedEvents(@Req() req) {
     return this.eventsService.getMyArchivedEvents(req.user.id);
+  }
+  @Get(':id')
+  getEventById(@Param('id', ParseIntPipe) id: number) {
+    return this.eventsService.getEventById(id);
+  }
+
+  // ORGANIZER - DETALII COMPLETE
+  @Get(':id/organizer')
+  @Roles('ORGANIZER')
+  getEventByIdOrganizer(@Req() req, @Param('id', ParseIntPipe) id: number) {
+    return this.eventsService.getEventByIdOrganizer(id, req.user.id);
+  }
+  @Post(':id/favorite')
+  @Roles('STUDENT')
+  toggleFavorite(@Req() req, @Param('id', ParseIntPipe) id: number) {
+    return this.eventsService.toggleFavorite(req.user.id, id);
   }
 }

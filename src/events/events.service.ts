@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventStatus } from '@prisma/client';
+import { EventFilterDto } from './dto/event-filter.dto';
 
 @Injectable()
 export class EventsService {
@@ -106,16 +107,71 @@ export class EventsService {
 
     return { message: 'Eveniment șters definitiv' };
   }
+  async listActiveEvents(filters: EventFilterDto = {}) {
+    const { facultyId, typeId, organizerId, search, dateFrom, dateTo } =
+      filters;
 
-  async listActiveEvents() {
     return this.prisma.events.findMany({
       where: {
         status: EventStatus.active,
         isArchived: false,
+
+        faculty_id: facultyId ? Number(facultyId) : undefined,
+        type_id: typeId ? Number(typeId) : undefined,
+        organizer_id: organizerId ? Number(organizerId) : undefined,
+
+        ...(search && {
+          OR: [
+            {
+              title: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              description: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              location: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              users: {
+                OR: [
+                  {
+                    first_name: {
+                      contains: search,
+                      mode: 'insensitive',
+                    },
+                  },
+                  {
+                    last_name: {
+                      contains: search,
+                      mode: 'insensitive',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+
+        date_start: {
+          gte: dateFrom ? new Date(dateFrom) : undefined,
+          lte: dateTo ? new Date(dateTo) : undefined,
+        },
       },
-      orderBy: { date_start: 'asc' },
+      orderBy: {
+        date_start: 'asc',
+      },
     });
   }
+
   async getMyArchivedEvents(userId: number) {
     return this.prisma.events.findMany({
       where: {
@@ -126,5 +182,100 @@ export class EventsService {
         created_at: 'desc',
       },
     });
+  }
+  async getEventById(eventId: number) {
+    const event = await this.prisma.events.findFirst({
+      where: {
+        id_event: eventId,
+        status: EventStatus.active,
+        isArchived: false,
+      },
+      include: {
+        users: {
+          select: {
+            first_name: true,
+            last_name: true,
+            organization_name: true,
+          },
+        },
+        event_types: true,
+        faculties: true,
+        files: true,
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Eveniment inexistent');
+    }
+
+    return event;
+  }
+  async getEventByIdOrganizer(eventId: number, userId: number) {
+    const event = await this.prisma.events.findUnique({
+      where: { id_event: eventId },
+      include: {
+        registrations: true,
+        feedback: true,
+        files: true,
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Eveniment inexistent');
+    }
+
+    if (event.organizer_id !== userId) {
+      throw new ForbiddenException('Nu ai acces la acest eveniment');
+    }
+
+    return event;
+  }
+  async toggleFavorite(userId: number, eventId: number) {
+    // verifică dacă eventul există și e activ
+    const event = await this.prisma.events.findFirst({
+      where: {
+        id_event: eventId,
+        status: EventStatus.active,
+        isArchived: false,
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Eveniment indisponibil');
+    }
+
+    // verifică dacă e deja favorit
+    const existing = await this.prisma.favorite_events.findUnique({
+      where: {
+        user_id_event_id: {
+          user_id: userId,
+          event_id: eventId,
+        },
+      },
+    });
+
+    // dacă există → remove (toggle OFF)
+    if (existing) {
+      await this.prisma.favorite_events.delete({
+        where: {
+          user_id_event_id: {
+            user_id: userId,
+            event_id: eventId,
+          },
+        },
+      });
+
+      return { favorited: false };
+    }
+
+    // dacă NU există → add (toggle ON)
+    await this.prisma.favorite_events.create({
+      data: {
+        user_id: userId,
+        event_id: eventId,
+      },
+    });
+
+    return { favorited: true };
   }
 }

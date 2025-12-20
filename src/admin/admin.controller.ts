@@ -9,6 +9,10 @@ import { AdminService } from './admin.service';
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
+  // =========================
+  // EVENTS
+  // =========================
+
   @Get('events/pending')
   @Roles('ADMIN')
   getPendingEvents() {
@@ -25,5 +29,27 @@ export class AdminController {
   @Roles('ADMIN')
   rejectEvent(@Param('id') id: string) {
     return this.adminService.rejectEvent(Number(id));
+  }
+
+  // =========================
+  // ORGANIZERS
+  // =========================
+
+  @Get('organizers/pending')
+  @Roles('ADMIN')
+  getPendingOrganizers() {
+    return this.adminService.getPendingOrganizers();
+  }
+
+  @Patch('organizers/:id/approve')
+  @Roles('ADMIN')
+  approveOrganizer(@Param('id') id: string) {
+    return this.adminService.approveOrganizer(Number(id));
+  }
+
+  @Patch('organizers/:id/reject')
+  @Roles('ADMIN')
+  rejectOrganizer(@Param('id') id: string) {
+    return this.adminService.rejectOrganizer(Number(id));
   }
 }
