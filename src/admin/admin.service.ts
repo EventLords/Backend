@@ -10,6 +10,10 @@ import { EventStatus } from '@prisma/client';
 export class AdminService {
   constructor(private prisma: PrismaService) {}
 
+  // =========================
+  // EVENTS
+  // =========================
+
   async getPendingEvents() {
     return this.prisma.events.findMany({
       where: {
@@ -61,6 +65,82 @@ export class AdminService {
     return this.prisma.events.update({
       where: { id_event: eventId },
       data: { status: EventStatus.rejected },
+    });
+  }
+
+  // =========================
+  // ORGANIZERS
+  // =========================
+
+  async getPendingOrganizers() {
+    return this.prisma.users.findMany({
+      where: {
+        role: 'ORGANIZER',
+        isApproved: false,
+        isRejected: false,
+      },
+      select: {
+        id_user: true,
+        email: true,
+        organization_name: true,
+        organization_type: true,
+        created_at: true,
+      },
+      orderBy: {
+        created_at: 'asc',
+      },
+    });
+  }
+
+  async approveOrganizer(userId: number) {
+    const user = await this.prisma.users.findUnique({
+      where: { id_user: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Utilizator inexistent');
+    }
+
+    if (user.role !== 'ORGANIZER') {
+      throw new BadRequestException('Utilizatorul nu este organizer');
+    }
+
+    if (user.isApproved) {
+      throw new BadRequestException('Organizer deja aprobat');
+    }
+
+    return this.prisma.users.update({
+      where: { id_user: userId },
+      data: {
+        isApproved: true,
+        isRejected: false,
+      },
+    });
+  }
+
+  async rejectOrganizer(userId: number) {
+    const user = await this.prisma.users.findUnique({
+      where: { id_user: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Utilizator inexistent');
+    }
+
+    if (user.role !== 'ORGANIZER') {
+      throw new BadRequestException('Utilizatorul nu este organizer');
+    }
+
+    if (user.isRejected) {
+      throw new BadRequestException('Organizer deja respins');
+    }
+
+    return this.prisma.users.update({
+      where: { id_user: userId },
+      data: {
+        isRejected: true,
+        isApproved: false,
+      },
     });
   }
 }

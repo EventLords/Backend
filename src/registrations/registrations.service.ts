@@ -1,109 +1,149 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { EventStatus } from '@prisma/client';
 
 @Injectable()
 export class RegistrationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  // ======================================================
-  // ÎNSCRIERE STUDENT
-  // ======================================================
+  // ================= STUDENT =================
+
   async registerStudent(userId: number, eventId: number) {
-    // 1. verificăm evenimentul
-    const event = await this.prisma.events.findUnique({
-      where: { id_event: eventId },
-    });
-
-    if (!event) {
-      throw new NotFoundException('Eveniment inexistent');
-    }
-
-    if (event.status !== EventStatus.active || event.isArchived) {
-      throw new BadRequestException('Eveniment indisponibil');
-    }
-
-    // 2. verificăm dacă studentul e deja înscris
-    const existing = await this.prisma.registrations.findUnique({
-      where: {
-        event_id_user_id: {
-          event_id: eventId,
-          user_id: userId,
-        },
-      },
-    });
-
-    if (existing) {
-      throw new BadRequestException('Ești deja înscris la acest eveniment');
-    }
-
-    // 3. înscriere
     return this.prisma.registrations.create({
       data: {
-        event_id: eventId,
         user_id: userId,
+        event_id: eventId,
+        qr_token: crypto.randomUUID(),
       },
     });
   }
 
-  // ======================================================
-  // RENUNȚARE STUDENT
-  // ======================================================
   async unregisterStudent(userId: number, eventId: number) {
-    // 1. verificăm dacă există înscrierea
-    const registration = await this.prisma.registrations.findUnique({
+    return this.prisma.registrations.deleteMany({
       where: {
-        event_id_user_id: {
-          event_id: eventId,
-          user_id: userId,
-        },
+        user_id: userId,
+        event_id: eventId,
       },
     });
-
-    if (!registration) {
-      throw new BadRequestException('Nu ești înscris la acest eveniment');
-    }
-
-    // 2. ștergem înscrierea
-    await this.prisma.registrations.delete({
-      where: {
-        event_id_user_id: {
-          event_id: eventId,
-          user_id: userId,
-        },
-      },
-    });
-
-    return {
-      message: 'Ai renunțat cu succes la eveniment',
-    };
   }
+
   async getMyRegistrations(userId: number) {
     return this.prisma.registrations.findMany({
       where: {
         user_id: userId,
       },
-      orderBy: {
-        registration_date: 'desc',
-      },
       include: {
-        events: {
-          select: {
-            id_event: true,
-            title: true,
-            description: true,
-            date_start: true,
-            deadline: true,
-            location: true,
-            status: true,
-            isArchived: true,
-          },
-        },
+        events: true,
       },
     });
+  }
+
+  // ================= ORGANIZER =================
+
+  async getParticipants(
+    organizerId: number,
+    eventId: number,
+    status?: 'all' | 'checked-in' | 'absent',
+  ) {
+    const where: any = {
+      event_id: eventId,
+      events: {
+        organizer_id: organizerId,
+      },
+    };
+
+    if (status === 'checked-in') {
+      where.checked_in = true;
+    }
+
+    if (status === 'absent') {
+      where.checked_in = false;
+    }
+
+    return this.prisma.registrations.findMany({
+      where,
+      include: {
+        users: true,
+      },
+    });
+  }
+
+  async checkInParticipant(
+    organizerId: number,
+    eventId: number,
+    qrToken: string,
+  ) {
+    return this.prisma.registrations.updateMany({
+      where: {
+        event_id: eventId,
+        qr_token: qrToken,
+        events: {
+          organizer_id: organizerId,
+        },
+      },
+      data: {
+        checked_in: true,
+      },
+    });
+  }
+
+  async exportParticipantsCsv(organizerId: number, eventId: number) {
+    const participants = await this.prisma.registrations.findMany({
+      where: {
+        event_id: eventId,
+        events: {
+          organizer_id: organizerId,
+        },
+      },
+      include: {
+        users: true,
+      },
+    });
+
+    const header = 'Last Name,First Name,Email,Checked In\n';
+    const rows = participants
+      .map(
+        (p) =>
+          `${p.users.last_name},${p.users.first_name},${p.users.email},${
+            p.checked_in ? 'YES' : 'NO'
+          }`,
+      )
+      .join('\n');
+
+    return header + rows;
+  }
+
+  // ================= ✅ STATISTICI PARTICIPARE =================
+
+  async getEventParticipationStats(organizerId: number, eventId: number) {
+    const event = await this.prisma.events.findFirst({
+      where: {
+        id_event: eventId,
+        organizer_id: organizerId,
+      },
+    });
+
+    if (!event) {
+      throw new ForbiddenException('Nu ai acces la acest eveniment');
+    }
+
+    const totalRegistered = await this.prisma.registrations.count({
+      where: {
+        event_id: eventId,
+      },
+    });
+
+    const totalCheckedIn = await this.prisma.registrations.count({
+      where: {
+        event_id: eventId,
+        checked_in: true,
+      },
+    });
+
+    return {
+      eventId,
+      totalRegistered,
+      totalCheckedIn,
+      totalAbsent: totalRegistered - totalCheckedIn,
+    };
   }
 }
