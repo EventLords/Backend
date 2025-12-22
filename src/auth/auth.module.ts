@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -10,9 +11,10 @@ import { JwtStrategy } from './jwt.strategy';
       secret: 'SUPER_SECRET_KEY',
       signOptions: { expiresIn: '7d' },
     }),
+    NotificationsModule, // ✅ AICI
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
-  exports: [JwtModule, AuthService], // <-- IMPORTANT!
+  exports: [JwtModule, AuthService],
 })
 export class AuthModule {}
