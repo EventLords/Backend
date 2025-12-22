@@ -9,10 +9,15 @@ import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventStatus } from '@prisma/client';
 import { EventFilterDto } from './dto/event-filter.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '@prisma/client';
 
 @Injectable()
 export class EventsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async createEvent(userId: number, isApproved: boolean, dto: CreateEventDto) {
     if (!isApproved) {
@@ -274,6 +279,15 @@ export class EventsService {
         user_id: userId,
         event_id: eventId,
       },
+    });
+
+    // 🔔 NOTIFICARE: eveniment adăugat la favorite
+    await this.notificationsService.createNotification({
+      userId: userId,
+      eventId: eventId,
+      type: NotificationType.EVENT_FAVORITED,
+      title: 'Eveniment salvat',
+      message: `Evenimentul "${event.title}" a fost adăugat la favorite.`,
     });
 
     return { favorited: true };

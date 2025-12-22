@@ -14,6 +14,7 @@ import { FacultiesModule } from './faculties/faculties.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { FilesModule } from './files/files.module';
+import { AdminReportsModule } from './admin-reports/admin-reports.module';
 @Module({
   imports: [
     // 🔹 CRON / SCHEDULER (OBLIGATORIU pentru remindere)
@@ -29,6 +30,7 @@ import { FilesModule } from './files/files.module';
     RecommendationsModule,
     FeedbackModule,
     FilesModule,
+    AdminReportsModule,
     // 🔔 NOTIFICĂRI (favorite reminders + clopoțel)
     NotificationsModule,
   ],
