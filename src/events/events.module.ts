@@ -11,6 +11,6 @@ import { PrismaModule } from 'src/prisma/prisma.module';
     NotificationsModule, // ✅ OBLIGATORIU
   ],
   controllers: [EventsController],
-  providers: [EventsService, PrismaService],
+  providers: [EventsService],
 })
 export class EventsModule {}
