@@ -1,8 +1,11 @@
-import { Controller, Get, Patch, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Param, UseGuards, Req } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { AdminService } from './admin.service';
+import { Body } from '@nestjs/common';
+import { RejectOrganizerDto } from './dto/reject-organizer.dto';
+import { RejectEventDto } from './dto/reject-event.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -26,9 +29,8 @@ export class AdminController {
   }
 
   @Patch('events/:id/reject')
-  @Roles('ADMIN')
-  rejectEvent(@Param('id') id: string) {
-    return this.adminService.rejectEvent(Number(id));
+  rejectEvent(@Param('id') id: string, @Body() dto: RejectEventDto) {
+    return this.adminService.rejectEvent(Number(id), dto.reason);
   }
 
   // =========================
@@ -48,8 +50,17 @@ export class AdminController {
   }
 
   @Patch('organizers/:id/reject')
+  rejectOrganizer(@Param('id') id: string, @Body() dto: RejectOrganizerDto) {
+    return this.adminService.rejectOrganizer(Number(id), dto.reason);
+  }
+  @Get('dashboard')
   @Roles('ADMIN')
-  rejectOrganizer(@Param('id') id: string) {
-    return this.adminService.rejectOrganizer(Number(id));
+  getDashboard(@Req() req: any) {
+    return this.adminService.getDashboard(Number(req.user.id));
+  }
+  @Get('events/:id')
+  @Roles('ADMIN')
+  getEventDetails(@Param('id') id: string) {
+    return this.adminService.getEventDetails(Number(id));
   }
 }

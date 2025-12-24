@@ -6,10 +6,18 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '@prisma/client';
 
 @Injectable()
 export class FeedbackService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService, // ✅
+  ) {}
+  private readonly FEEDBACK_THRESHOLDS = [5, 10, 25]; // ✅ praguri pe event
+  private readonly LOW_RATING_THRESHOLD = 3; // ✅
+  private readonly LOW_RATING_MIN_COUNT = 3; // ✅
 
   async createFeedback(
     userId: number,
@@ -20,6 +28,8 @@ export class FeedbackService {
       where: { id_event: dto.event_id },
       select: {
         id_event: true,
+        title: true,
+        organizer_id: true,
         date_start: true,
         status: true,
         isArchived: true,
@@ -62,6 +72,57 @@ export class FeedbackService {
           comment: dto.comment ?? null,
         },
       });
+      // ✅ NOTIFICĂRI organizer (per event)
+      if (ev.organizer_id) {
+        // 1) câte feedback-uri are evenimentul acum
+        const feedbackCount = await this.prisma.feedback.count({
+          where: { event_id: ev.id_event },
+        });
+
+        // 2) avg rating
+        const agg = await this.prisma.feedback.aggregate({
+          where: { event_id: ev.id_event },
+          _avg: { rating: true },
+        });
+
+        const avgRating = agg._avg.rating ?? 0;
+
+        // A) primul feedback
+        if (feedbackCount === 1) {
+          await this.notificationsService.createNotification({
+            userId: ev.organizer_id,
+            eventId: ev.id_event,
+            type: NotificationType.EVENT_FEEDBACK_STARTED,
+            title: 'Ai primit primul feedback',
+            message: `Evenimentul "${ev.title}" a primit primul feedback.`,
+          });
+        }
+
+        // B) praguri 5/10/25
+        if (this.FEEDBACK_THRESHOLDS.includes(feedbackCount)) {
+          await this.notificationsService.createNotification({
+            userId: ev.organizer_id,
+            eventId: ev.id_event,
+            type: NotificationType.EVENT_FEEDBACK_THRESHOLD_REACHED,
+            title: 'Prag de feedback atins',
+            message: `Evenimentul "${ev.title}" are acum ${feedbackCount} feedback-uri. Rating mediu: ${avgRating.toFixed(2)}.`,
+          });
+        }
+
+        // C) rating mic (avg <= 3) după minim 3 feedback-uri
+        if (
+          feedbackCount >= this.LOW_RATING_MIN_COUNT &&
+          avgRating <= this.LOW_RATING_THRESHOLD
+        ) {
+          await this.notificationsService.createNotification({
+            userId: ev.organizer_id,
+            eventId: ev.id_event,
+            type: NotificationType.EVENT_FEEDBACK_LOW_RATING,
+            title: 'Rating scăzut',
+            message: `Rating scăzut pentru "${ev.title}" (${avgRating.toFixed(2)} din 5) după ${feedbackCount} feedback-uri. Verifică comentariile.`,
+          });
+        }
+      }
 
       return { success: true, feedback: created };
     } catch (e) {

@@ -14,10 +14,7 @@ export class NotificationsService {
    * CONFIG REMINDERE FAVORITE
    * ============================
    */
-  private readonly reminderConfigs: {
-    type: NotificationType;
-    minutesBefore: number;
-  }[] = [
+  private readonly reminderConfigs = [
     {
       type: NotificationType.FAVORITE_REMINDER_24H,
       minutesBefore: 24 * 60,
@@ -30,8 +27,7 @@ export class NotificationsService {
 
   /**
    * ============================
-   * CRON – REMINDERE EVENIMENTE FAVORITE
-   * (NU SE MODIFICĂ)
+   * CRON – FAVORITE REMINDERS
    * ============================
    */
   @Cron(CronExpression.EVERY_MINUTE)
@@ -48,24 +44,18 @@ export class NotificationsService {
           user_id: { not: null },
           event_id: { not: null },
           events: {
-            date_start: {
-              gte: start,
-              lt: end,
-            },
+            date_start: { gte: start, lt: end },
             status: 'active',
             isArchived: false,
           },
         },
-        include: {
-          events: true,
-        },
+        include: { events: true },
       });
 
       for (const fav of favorites) {
         if (!fav.user_id || !fav.event_id || !fav.events) continue;
 
         try {
-          // previne duplicatele
           await this.prisma.reminder_logs.create({
             data: {
               user_id: fav.user_id,
@@ -83,12 +73,7 @@ export class NotificationsService {
               message: `Evenimentul "${fav.events.title}" începe la ${fav.events.date_start.toLocaleString()}`,
             },
           });
-
-          this.logger.log(
-            `✅ FAVORITE REMINDER user=${fav.user_id} event=${fav.event_id} type=${cfg.type}`,
-          );
         } catch {
-          // reminder deja trimis
           continue;
         }
       }
@@ -97,78 +82,60 @@ export class NotificationsService {
 
   /**
    * ============================
-   * CRON – CERERE FEEDBACK DUPĂ EVENIMENT
-   * (FUNCȚIONALITATE NOUĂ)
+   * CRON – FEEDBACK REQUEST
    * ============================
    */
   @Cron(CronExpression.EVERY_HOUR)
   async sendFeedbackRequests(): Promise<void> {
     const now = new Date();
-    this.logger.log(`CRON FEEDBACK @ ${now.toISOString()}`);
 
-    // 1️⃣ Evenimente care AU AVUT LOC
     const pastEvents = await this.prisma.events.findMany({
       where: {
         date_start: { lt: now },
         status: 'active',
         isArchived: false,
       },
-      select: {
-        id_event: true,
-        title: true,
-      },
+      select: { id_event: true, title: true },
     });
 
-    if (!pastEvents.length) return;
-
     for (const ev of pastEvents) {
-      // 2️⃣ Participanți
       const registrations = await this.prisma.registrations.findMany({
         where: { event_id: ev.id_event },
         select: { user_id: true },
       });
 
       for (const reg of registrations) {
-        const userId = reg.user_id;
-
-        // 3️⃣ Dacă există feedback → skip
         const feedbackExists = await this.prisma.feedback.findFirst({
           where: {
-            user_id: userId,
+            user_id: reg.user_id,
             event_id: ev.id_event,
           },
         });
         if (feedbackExists) continue;
 
-        // 4️⃣ Dacă notificarea a fost deja trimisă → skip
         const notificationExists = await this.prisma.notifications.findFirst({
           where: {
-            user_id: userId,
+            user_id: reg.user_id,
             event_id: ev.id_event,
             type: NotificationType.FEEDBACK_REQUESTED,
           },
         });
         if (notificationExists) continue;
 
-        // 5️⃣ Creăm notificarea
         await this.createNotification({
-          userId: userId,
+          userId: reg.user_id,
           eventId: ev.id_event,
           type: NotificationType.FEEDBACK_REQUESTED,
           title: 'Spune-ne părerea ta',
-          message: `Cum ți s-a părut evenimentul "${ev.title}"? Oferă un rating și un feedback.`,
+          message: `Cum ți s-a părut evenimentul "${ev.title}"?`,
         });
-
-        this.logger.log(
-          `✅ FEEDBACK REQUEST user=${userId} event=${ev.id_event}`,
-        );
       }
     }
   }
 
   /**
    * ============================
-   * API NOTIFICĂRI (EXISTENT)
+   * API
    * ============================
    */
   async getMyNotifications(userId: number) {
@@ -180,12 +147,8 @@ export class NotificationsService {
 
   async getUnreadCount(userId: number) {
     const count = await this.prisma.notifications.count({
-      where: {
-        user_id: userId,
-        read_at: null,
-      },
+      where: { user_id: userId, read_at: null },
     });
-
     return { count };
   }
 
@@ -195,9 +158,20 @@ export class NotificationsService {
         id_notification: notificationId,
         user_id: userId,
       },
-      data: {
-        read_at: new Date(),
+      data: { read_at: new Date() },
+    });
+
+    return { success: true };
+  }
+
+  // ➕ SAFE ADD
+  async markAllAsRead(userId: number) {
+    await this.prisma.notifications.updateMany({
+      where: {
+        user_id: userId,
+        read_at: null,
       },
+      data: { read_at: new Date() },
     });
 
     return { success: true };
@@ -205,7 +179,7 @@ export class NotificationsService {
 
   /**
    * ============================
-   * CREATE NOTIFICATION (UTILITAR)
+   * UTIL
    * ============================
    */
   async createNotification(data: {

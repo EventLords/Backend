@@ -5,10 +5,15 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   // =========================
   // EVENTS
@@ -41,13 +46,28 @@ export class AdminService {
       );
     }
 
-    return this.prisma.events.update({
+    if (!event.organizer_id) {
+      throw new BadRequestException('Evenimentul nu are organizer');
+    }
+
+    const updated = await this.prisma.events.update({
       where: { id_event: eventId },
       data: { status: EventStatus.active },
     });
+
+    // 🔔 NOTIFICARE PENTRU ORGANIZER
+    await this.notificationsService.createNotification({
+      userId: event.organizer_id,
+      eventId: event.id_event,
+      type: NotificationType.EVENT_APPROVED,
+      title: 'Eveniment aprobat',
+      message: `Evenimentul "${event.title}" a fost aprobat și este acum public.`,
+    });
+
+    return updated;
   }
 
-  async rejectEvent(eventId: number) {
+  async rejectEvent(eventId: number, reason: string) {
     const event = await this.prisma.events.findUnique({
       where: { id_event: eventId },
     });
@@ -62,10 +82,27 @@ export class AdminService {
       );
     }
 
-    return this.prisma.events.update({
+    if (!event.organizer_id) {
+      throw new BadRequestException('Evenimentul nu are organizer asociat');
+    }
+
+    const updated = await this.prisma.events.update({
       where: { id_event: eventId },
-      data: { status: EventStatus.rejected },
+      data: {
+        status: EventStatus.rejected,
+        rejection_reason: reason,
+      },
     });
+
+    await this.notificationsService.createNotification({
+      userId: event.organizer_id,
+      eventId: event.id_event,
+      type: NotificationType.EVENT_REJECTED,
+      title: 'Eveniment respins',
+      message: `Evenimentul "${event.title}" a fost respins. Motiv: ${reason}`,
+    });
+
+    return updated;
   }
 
   // =========================
@@ -109,16 +146,26 @@ export class AdminService {
       throw new BadRequestException('Organizer deja aprobat');
     }
 
-    return this.prisma.users.update({
+    // 1) update user
+    const updated = await this.prisma.users.update({
       where: { id_user: userId },
       data: {
         isApproved: true,
         isRejected: false,
       },
     });
-  }
 
-  async rejectOrganizer(userId: number) {
+    // 2) create notification
+    await this.notificationsService.createNotification({
+      userId: updated.id_user,
+      type: NotificationType.ACCOUNT_APPROVED,
+      title: 'Cont aprobat',
+      message: 'Contul tău de organizer a fost aprobat. Poți crea evenimente.',
+    });
+
+    return updated;
+  }
+  async rejectOrganizer(userId: number, reason: string) {
     const user = await this.prisma.users.findUnique({
       where: { id_user: userId },
     });
@@ -135,12 +182,85 @@ export class AdminService {
       throw new BadRequestException('Organizer deja respins');
     }
 
-    return this.prisma.users.update({
+    const updated = await this.prisma.users.update({
       where: { id_user: userId },
       data: {
         isRejected: true,
         isApproved: false,
+        rejection_reason: reason,
       },
     });
+
+    await this.notificationsService.createNotification({
+      userId: updated.id_user,
+      type: NotificationType.ACCOUNT_REJECTED,
+      title: 'Cont respins',
+      message: `Contul tău a fost respins. Motiv: ${reason}`,
+    });
+
+    return updated;
+  }
+  async getDashboard(adminUserId: number) {
+    // 1) pending events
+    const pendingEvents = await this.prisma.events.count({
+      where: { status: EventStatus.pending, isArchived: false },
+    });
+
+    // 2) pending organizers
+    const pendingOrganizers = await this.prisma.users.count({
+      where: {
+        role: 'ORGANIZER',
+        isApproved: false,
+        isRejected: false,
+      },
+    });
+
+    // 3) unread notifications pentru admin
+    const unreadNotifications = await this.prisma.notifications.count({
+      where: { user_id: adminUserId, read_at: null },
+    });
+
+    return {
+      pendingEvents,
+      pendingOrganizers,
+      unreadNotifications,
+    };
+  }
+  async getEventDetails(eventId: number) {
+    const event = await this.prisma.events.findUnique({
+      where: { id_event: eventId },
+      include: {
+        users: {
+          select: {
+            id_user: true,
+            email: true,
+            first_name: true,
+            last_name: true,
+            organization_name: true,
+            organization_type: true,
+          },
+        },
+        event_types: true,
+        faculties: true,
+        files: true,
+        registrations: true,
+        feedback: {
+          include: {
+            users: {
+              select: {
+                first_name: true,
+                last_name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Eveniment inexistent');
+    }
+
+    return event;
   }
 }

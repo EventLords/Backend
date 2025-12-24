@@ -25,4 +25,10 @@ export class NotificationsController {
   markAsRead(@Req() req: any, @Param('id') id: string) {
     return this.service.markAsRead(this.getUserId(req), Number(id));
   }
+
+  // ➕ SAFE ADD
+  @Patch('me/read-all')
+  markAllAsRead(@Req() req: any) {
+    return this.service.markAllAsRead(this.getUserId(req));
+  }
 }

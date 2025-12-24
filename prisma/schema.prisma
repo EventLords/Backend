@@ -48,6 +48,7 @@ model events {
   notifications          notifications[]
   recommendation_history recommendation_history[]
   registrations          registrations[]
+  rejection_reason       String?
 }
 
 model faculties {
@@ -151,6 +152,7 @@ model users {
   registrations            registrations[]
   faculties                faculties?               @relation(fields: [faculty_id], references: [id_faculty])
   specializations          specializations?         @relation(fields: [specialization_id], references: [id_specialization])
+  rejection_reason         String?
 }
 
 model notifications {
@@ -188,11 +190,54 @@ enum EventStatus {
 }
 
 enum NotificationType {
+  // ACCOUNT
+  ACCOUNT_CREATED
+  ACCOUNT_APPROVED
+  ACCOUNT_REJECTED
+
+  // EVENTS – lifecycle
+  EVENT_CREATED
+  EVENT_UPDATED
+  EVENT_DELETED
+  EVENT_SUBMITTED_FOR_REVIEW
+  EVENT_APPROVED
+  EVENT_REJECTED
+  EVENT_RECOMMENDED
+  EVENT_FULL
+  EVENT_THRESHOLD_REACHED
+  EVENT_FEEDBACK_STARTED
+  EVENT_FEEDBACK_THRESHOLD_REACHED
+  EVENT_FEEDBACK_LOW_RATING
+  
+
+  // REGISTRATIONS
+  EVENT_REGISTERED
+  EVENT_UNREGISTERED
+  REGISTRATION_CANCELLED
+  CHECKIN_DONE
+
+  // FILES & MEDIA
+  FILE_UPLOADED
+  FILE_DELETED
+  COVER_SET
+  UPLOAD_FAILED
+
+  // FEEDBACK & STATS
+  FEEDBACK_RECEIVED
+  FEEDBACK_REQUESTED
+  STATS_AVAILABLE
+
+  // FAVORITES & REMINDERS
+  EVENT_FAVORITED
   FAVORITE_REMINDER_24H
   FAVORITE_REMINDER_1H
-  ACCOUNT_CREATED
-  EVENT_REGISTERED
-  EVENT_FAVORITED
-  EVENT_RECOMMENDED
-  FEEDBACK_REQUESTED
+
+  // SYSTEM
+  EXPORT_DONE
+  PERMISSION_DENIED
+
+  // ADMIN – ACTION REQUIRED
+  ADMIN_EVENT_PENDING
+  ADMIN_ORGANIZER_PENDING
+
 }

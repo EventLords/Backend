@@ -21,7 +21,6 @@ export class AuthService {
   // REGISTER STUDENT
   // --------------------------------------------------------
   async registerStudent(dto: RegisterStudentDto) {
-    // 1. verificăm dacă email-ul există
     const existing = await this.prisma.users.findUnique({
       where: { email: dto.email },
     });
@@ -30,15 +29,12 @@ export class AuthService {
       throw new BadRequestException('Există deja un cont cu acest e-mail.');
     }
 
-    // 2. hash parola
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    // 3. email USV? → auto-approved
     const isUSVemail =
       dto.email.toLowerCase().endsWith('@usv.ro') ||
       dto.email.toLowerCase().endsWith('@student.usv.ro');
 
-    // 4. creăm studentul
     const student = await this.prisma.users.create({
       data: {
         email: dto.email,
@@ -53,7 +49,7 @@ export class AuthService {
         study_cycle: dto.studyCycle,
         study_year: dto.studyYear ?? null,
 
-        isApproved: isUSVemail ? true : false,
+        isApproved: isUSVemail,
       },
       select: {
         id_user: true,
@@ -70,7 +66,6 @@ export class AuthService {
       },
     });
 
-    // 5. NOTIFICARE: cont creat
     await this.notificationsService.createNotification({
       userId: student.id_user,
       type: NotificationType.ACCOUNT_CREATED,
@@ -82,7 +77,7 @@ export class AuthService {
   }
 
   // --------------------------------------------------------
-  // REGISTER ORGANIZER (nemodificat)
+  // REGISTER ORGANIZER
   // --------------------------------------------------------
   async registerOrganizer(dto: RegisterOrganizerDto) {
     const existing = await this.prisma.users.findUnique({
@@ -110,6 +105,7 @@ export class AuthService {
         organization_description: dto.organizationDescription,
 
         isApproved: false,
+        isRejected: false,
       },
       select: {
         id_user: true,
@@ -122,15 +118,40 @@ export class AuthService {
         organization_name: true,
         organization_description: true,
         isApproved: true,
+        isRejected: true,
         created_at: true,
       },
     });
+    const admins = await this.prisma.users.findMany({
+      where: { role: 'ADMIN' },
+      select: { id_user: true },
+    });
+
+    for (const admin of admins) {
+      const exists = await this.prisma.notifications.findFirst({
+        where: {
+          user_id: admin.id_user,
+          event_id: organizer.id_user, // 👈 FOARTE IMPORTANT
+          type: NotificationType.ADMIN_ORGANIZER_PENDING,
+          read_at: null,
+        },
+      });
+
+      if (!exists) {
+        await this.notificationsService.createNotification({
+          userId: admin.id_user,
+          type: NotificationType.ADMIN_ORGANIZER_PENDING,
+          title: 'Cerere nouă de organizer',
+          message: `Un nou organizer (${organizer.email}) a cerut aprobarea contului.`,
+        });
+      }
+    }
 
     return organizer;
   }
 
   // --------------------------------------------------------
-  // LOGIN (nemodificat)
+  // LOGIN (FIXAT CORECT)
   // --------------------------------------------------------
   async login(dto: LoginDto) {
     const user = await this.prisma.users.findUnique({
@@ -150,12 +171,23 @@ export class AuthService {
       throw new BadRequestException('Email sau parolă incorectă.');
     }
 
+    // ✅ ORGANIZER REJECTED
+    if (user.role === 'ORGANIZER' && user.isRejected) {
+      throw new BadRequestException(
+        `Contul tău a fost respins. Motiv: ${
+          user.rejection_reason ?? 'Nespecificat'
+        }`,
+      );
+    }
+
+    // ✅ ORGANIZER PENDING
     if (user.role === 'ORGANIZER' && !user.isApproved) {
       throw new BadRequestException(
         'Contul tău de organizator este în curs de aprobare.',
       );
     }
 
+    // ✅ STUDENT PENDING
     if (user.role === 'STUDENT' && !user.isApproved) {
       throw new BadRequestException(
         'Contul tău de student nu a fost aprobat încă.',
