@@ -16,6 +16,7 @@ export class RegisterOrganizerDto {
   lastName: string; // Prenume responsabil
 
   @IsEmail()
+  @IsNotEmpty()
   email: string;
 
   @IsString()
@@ -24,17 +25,18 @@ export class RegisterOrganizerDto {
 
   @IsString()
   @IsNotEmpty()
+  @MinLength(10)
   phone: string;
 
   @IsString()
   @IsNotEmpty()
-  organizationType: string; // Tip organizație
+  organizationType: string;
 
   @IsOptional()
   @IsString()
-  organizationName?: string; // Numele organizației (opțional)
+  organizationName?: string;
 
   @IsString()
   @IsNotEmpty()
-  organizationDescription: string; // Descriere și motivul solicitării
+  organizationDescription: string;
 }

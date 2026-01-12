@@ -29,4 +29,8 @@ export class EventFilterDto {
   @IsOptional()
   @IsDateString()
   dateTo?: string;
+
+  @IsOptional()
+  @IsString()
+  location?: string;
 }

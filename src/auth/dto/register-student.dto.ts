@@ -5,36 +5,43 @@ import {
   IsOptional,
   IsString,
   MinLength,
+  Min,
+  Max,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class RegisterStudentDto {
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'Prenumele trebuie să fie text' })
+  @IsNotEmpty({ message: 'Prenumele este obligatoriu' })
   firstName: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'Numele trebuie să fie text' })
+  @IsNotEmpty({ message: 'Numele este obligatoriu' })
   lastName: string;
 
-  @IsEmail()
+  @IsEmail({}, { message: 'Email invalid' })
   email: string;
 
   @IsString()
-  @MinLength(6)
+  @MinLength(6, { message: 'Parola trebuie să aibă minim 6 caractere' })
   password: string;
 
-  // Licență / Master / Doctorat etc.
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'Ciclul de studiu este obligatoriu' })
+  @IsNotEmpty({ message: 'Ciclul de studiu este obligatoriu' })
   studyCycle: string;
 
-  @IsInt()
+  @Type(() => Number)
+  @IsInt({ message: 'facultyId trebuie să fie număr întreg' })
   facultyId: number;
 
-  @IsInt()
+  @Type(() => Number)
+  @IsInt({ message: 'specializationId trebuie să fie număr întreg' })
   specializationId: number;
 
-  @IsInt()
+  @Type(() => Number)
+  @IsInt({ message: 'Anul de studiu trebuie să fie număr' })
+  @Min(1, { message: 'Anul de studiu minim este 1' })
+  @Max(6, { message: 'Anul de studiu maxim este 6' })
   @IsOptional()
   studyYear?: number;
 }

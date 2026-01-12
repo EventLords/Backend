@@ -5,6 +5,7 @@ import {
   IsString,
   IsInt,
   Min,
+  IsNumber,
 } from 'class-validator';
 import { EventStatus } from '@prisma/client';
 
@@ -22,16 +23,27 @@ export class UpdateEventDto {
   date_start?: string;
 
   @IsOptional()
-  @IsEnum(EventStatus)
-  status?: EventStatus;
+  @IsDateString()
+  deadline?: string;
 
   @IsOptional()
   @IsString()
   location?: string;
 
-  // ✅ ADAUGĂ ASTA
   @IsOptional()
-  @IsInt()
-  @Min(1)
-  max_participants?: number;
+  @IsString()
+  duration?: string;
+
+  @IsOptional()
+  max_participants?: number | string;
+
+  @IsOptional()
+  faculty_id?: number | string;
+
+  @IsOptional()
+  type_id?: number | string;
+
+  @IsOptional()
+  @IsEnum(EventStatus)
+  status?: EventStatus;
 }

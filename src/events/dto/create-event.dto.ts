@@ -8,7 +8,7 @@ import {
 
 export class CreateEventDto {
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Titlul este obligatoriu' })
   title: string;
 
   @IsNumber()
@@ -17,13 +17,14 @@ export class CreateEventDto {
   @IsNumber()
   faculty_id: number;
 
-  @IsDateString()
+  @IsDateString({}, { message: 'Data de început este invalidă' })
   date_start: string;
 
-  @IsDateString()
+  @IsDateString({}, { message: 'Deadline-ul este invalid' })
   deadline: string;
 
   @IsString()
+  @IsNotEmpty({ message: 'Locația este obligatorie' })
   location: string;
 
   @IsNumber()
@@ -33,7 +34,7 @@ export class CreateEventDto {
   @IsString()
   duration?: string;
 
-  @IsOptional()
   @IsString()
-  description?: string;
+  @IsNotEmpty({ message: 'Descrierea este obligatorie' })
+  description: string;
 }

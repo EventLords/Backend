@@ -12,7 +12,7 @@ export class RecommendationsController {
   }
 
   @Get('me')
-  getMyRecommendations(@Req() req: any) {
+  async getMyRecommendations(@Req() req: any) {
     return this.service.getRecommendationsForUser(this.getUserId(req));
   }
 }

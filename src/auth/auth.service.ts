@@ -29,11 +29,15 @@ export class AuthService {
       throw new BadRequestException('Există deja un cont cu acest e-mail.');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const email = dto.email.toLowerCase();
 
-    const isUSVemail =
-      dto.email.toLowerCase().endsWith('@usv.ro') ||
-      dto.email.toLowerCase().endsWith('@student.usv.ro');
+    if (!email.endsWith('@student.usv.ro')) {
+      throw new BadRequestException(
+        'Pentru conturile de student este permis doar emailul @student.usv.ro',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     const student = await this.prisma.users.create({
       data: {
@@ -49,7 +53,7 @@ export class AuthService {
         study_cycle: dto.studyCycle,
         study_year: dto.studyYear ?? null,
 
-        isApproved: isUSVemail,
+        isApproved: true,
       },
       select: {
         id_user: true,
@@ -87,12 +91,13 @@ export class AuthService {
     if (existing) {
       throw new BadRequestException('Există deja un cont cu acest e-mail.');
     }
+    const email = dto.email.trim().toLowerCase();
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
     const organizer = await this.prisma.users.create({
       data: {
-        email: dto.email,
+        email: email,
         password_hash: passwordHash,
         role: 'ORGANIZER',
 
@@ -126,25 +131,14 @@ export class AuthService {
       where: { role: 'ADMIN' },
       select: { id_user: true },
     });
-
     for (const admin of admins) {
-      const exists = await this.prisma.notifications.findFirst({
-        where: {
-          user_id: admin.id_user,
-          event_id: organizer.id_user, // 👈 FOARTE IMPORTANT
-          type: NotificationType.ADMIN_ORGANIZER_PENDING,
-          read_at: null,
-        },
+      await this.notificationsService.createNotification({
+        userId: admin.id_user,
+        eventId: null,
+        type: NotificationType.ADMIN_ORGANIZER_PENDING,
+        title: 'Cerere nouă de organizer',
+        message: `Un nou organizer (${organizer.email}) a cerut aprobarea contului.`,
       });
-
-      if (!exists) {
-        await this.notificationsService.createNotification({
-          userId: admin.id_user,
-          type: NotificationType.ADMIN_ORGANIZER_PENDING,
-          title: 'Cerere nouă de organizer',
-          message: `Un nou organizer (${organizer.email}) a cerut aprobarea contului.`,
-        });
-      }
     }
 
     return organizer;
@@ -171,7 +165,6 @@ export class AuthService {
       throw new BadRequestException('Email sau parolă incorectă.');
     }
 
-    // ✅ ORGANIZER REJECTED
     if (user.role === 'ORGANIZER' && user.isRejected) {
       throw new BadRequestException(
         `Contul tău a fost respins. Motiv: ${
@@ -180,14 +173,12 @@ export class AuthService {
       );
     }
 
-    // ✅ ORGANIZER PENDING
     if (user.role === 'ORGANIZER' && !user.isApproved) {
       throw new BadRequestException(
         'Contul tău de organizator este în curs de aprobare.',
       );
     }
 
-    // ✅ STUDENT PENDING
     if (user.role === 'STUDENT' && !user.isApproved) {
       throw new BadRequestException(
         'Contul tău de student nu a fost aprobat încă.',

@@ -20,27 +20,38 @@ export class FeedbackController {
     return Number(req.user.id);
   }
 
-  // student lasă feedback
+
   @Post()
   create(@Req() req: any, @Body() dto: CreateFeedbackDto) {
     return this.service.createFeedback(this.getUserId(req), dto);
   }
 
-  // vezi feedback-urile la un eveniment (public sau doar logat – cum vrei)
+
   @Get('event/:eventId')
   getEventFeedback(@Param('eventId') eventId: string) {
     return this.service.getEventFeedback(Number(eventId));
   }
 
-  // sumar rating (avg + count)
+  
   @Get('event/:eventId/summary')
   getSummary(@Param('eventId') eventId: string) {
     return this.service.getEventRatingSummary(Number(eventId));
   }
 
-  // feedback-urile mele
+  
   @Get('me')
   getMine(@Req() req: any) {
     return this.service.getMyFeedback(this.getUserId(req));
+  }
+ 
+
+  @Get('organizer/event/:eventId')
+  @UseGuards(JwtAuthGuard)
+  async getOrganizerFeedback(
+    @Req() req: any,
+    @Param('eventId') eventId: string,
+  ) {
+    const userId = Number(req.user.id);
+    return this.service.getOrganizerEventFeedback(userId, Number(eventId));
   }
 }
