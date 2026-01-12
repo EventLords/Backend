@@ -20,7 +20,6 @@ export class AdminReportsService {
     const from = parseDateOrThrow(range.from);
     const to = parseDateOrThrow(range.to);
 
-    // nu stricăm logica ta: luăm evenimente ne-arhivate
     const where: any = { isArchived: false };
 
     if (from || to) {
@@ -32,7 +31,6 @@ export class AdminReportsService {
     return where;
   }
 
-  // 1) număr evenimente / lună
   async eventsPerMonth(range: DateRange) {
     const where = this.buildEventWhere(range);
 
@@ -42,15 +40,19 @@ export class AdminReportsService {
     });
 
     const map = new Map<string, number>();
+
     for (const e of events) {
       const d = new Date(e.date_start);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; // YYYY-MM
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       map.set(key, (map.get(key) ?? 0) + 1);
     }
 
     const data = [...map.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, count]) => ({ month, count }));
+      .map(([month, count]) => ({
+        month,
+        count,
+      }));
 
     return {
       from: range.from ?? null,
@@ -60,7 +62,6 @@ export class AdminReportsService {
     };
   }
 
-  // 2) participare medie + prezență medie
   async participationStats(range: DateRange) {
     const where = this.buildEventWhere(range);
 
@@ -119,7 +120,6 @@ export class AdminReportsService {
     };
   }
 
-  // 3) top evenimente (după înscrieri sau după prezență)
   async topEvents(opts: {
     from?: string;
     to?: string;
@@ -136,7 +136,7 @@ export class AdminReportsService {
         id_event: true,
         title: true,
         date_start: true,
-        users: { select: { first_name: true, last_name: true } }, // organizer
+        users: { select: { first_name: true, last_name: true } },
       },
     });
 

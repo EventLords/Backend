@@ -1,9 +1,17 @@
-import { Controller, Get, Patch, Param, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Param,
+  UseGuards,
+  Req,
+  Body,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { AdminService } from './admin.service';
-import { Body } from '@nestjs/common';
 import { RejectOrganizerDto } from './dto/reject-organizer.dto';
 import { RejectEventDto } from './dto/reject-event.dto';
 
@@ -12,9 +20,27 @@ import { RejectEventDto } from './dto/reject-event.dto';
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
+  @Get('dashboard')
+  @Roles('ADMIN')
+  getDashboard(@Req() req: any) {
+    return this.adminService.getDashboard(Number(req.user.id));
+  }
+
+  @Get('users')
+  @Roles('ADMIN')
+  getAllUsers() {
+    return this.adminService.getAllUsers();
+  }
+
   // =========================
   // EVENTS
   // =========================
+
+  @Get('events/active')
+  @Roles('ADMIN')
+  getActiveEvents() {
+    return this.adminService.getActiveEvents();
+  }
 
   @Get('events/pending')
   @Roles('ADMIN')
@@ -22,15 +48,31 @@ export class AdminController {
     return this.adminService.getPendingEvents();
   }
 
+  @Get('events/rejected')
+  @Roles('ADMIN')
+  getRejectedEvents() {
+    return this.adminService.getRejectedEvents();
+  }
+
+  @Get('events/:id')
+  @Roles('ADMIN')
+  getEventDetails(@Param('id', ParseIntPipe) id: number) {
+    return this.adminService.getEventDetails(id);
+  }
+
   @Patch('events/:id/approve')
   @Roles('ADMIN')
-  approveEvent(@Param('id') id: string) {
-    return this.adminService.approveEvent(Number(id));
+  approveEvent(@Param('id', ParseIntPipe) id: number) {
+    return this.adminService.approveEvent(id);
   }
 
   @Patch('events/:id/reject')
-  rejectEvent(@Param('id') id: string, @Body() dto: RejectEventDto) {
-    return this.adminService.rejectEvent(Number(id), dto.reason);
+  @Roles('ADMIN')
+  rejectEvent(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RejectEventDto,
+  ) {
+    return this.adminService.rejectEvent(id, dto.reason);
   }
 
   // =========================
@@ -45,22 +87,16 @@ export class AdminController {
 
   @Patch('organizers/:id/approve')
   @Roles('ADMIN')
-  approveOrganizer(@Param('id') id: string) {
-    return this.adminService.approveOrganizer(Number(id));
+  approveOrganizer(@Param('id', ParseIntPipe) id: number) {
+    return this.adminService.approveOrganizer(id);
   }
 
   @Patch('organizers/:id/reject')
-  rejectOrganizer(@Param('id') id: string, @Body() dto: RejectOrganizerDto) {
-    return this.adminService.rejectOrganizer(Number(id), dto.reason);
-  }
-  @Get('dashboard')
   @Roles('ADMIN')
-  getDashboard(@Req() req: any) {
-    return this.adminService.getDashboard(Number(req.user.id));
-  }
-  @Get('events/:id')
-  @Roles('ADMIN')
-  getEventDetails(@Param('id') id: string) {
-    return this.adminService.getEventDetails(Number(id));
+  rejectOrganizer(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RejectOrganizerDto,
+  ) {
+    return this.adminService.rejectOrganizer(id, dto.reason);
   }
 }

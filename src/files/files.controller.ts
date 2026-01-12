@@ -23,7 +23,7 @@ import { Delete } from '@nestjs/common';
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
-  // ================= 📤 UPLOAD MATERIAL =================
+  
   @Post()
   @Roles('ORGANIZER')
   @UseInterceptors(FileInterceptor('file'))
@@ -41,13 +41,13 @@ export class FilesController {
     return this.filesService.uploadFile(req.user.id, eventId, file.path);
   }
 
-  // ================= 📂 LISTARE MATERIALE =================
+  
   @Get()
   async getEventFiles(@Param('eventId', ParseIntPipe) eventId: number) {
     return this.filesService.getEventFiles(eventId);
   }
 
-  // ================= 🖼️ SETARE COVER =================
+  
   @Patch(':fileId/cover')
   @Roles('ORGANIZER')
   async setCover(
@@ -58,7 +58,7 @@ export class FilesController {
     return this.filesService.setCoverImage(req.user.id, eventId, fileId);
   }
 
-  // ================= 🖼️ GET COVER =================
+  
   @Get('cover')
   async getCover(@Param('eventId', ParseIntPipe) eventId: number) {
     return this.filesService.getCoverImage(eventId);

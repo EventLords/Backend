@@ -11,7 +11,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       secret: 'SUPER_SECRET_KEY',
       signOptions: { expiresIn: '7d' },
     }),
-    NotificationsModule, // ✅ AICI
+    NotificationsModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

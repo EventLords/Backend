@@ -13,17 +13,17 @@ import { NotificationType } from '@prisma/client';
 export class FeedbackService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationsService: NotificationsService, // ✅
+    private readonly notificationsService: NotificationsService,
   ) {}
-  private readonly FEEDBACK_THRESHOLDS = [5, 10, 25]; // ✅ praguri pe event
-  private readonly LOW_RATING_THRESHOLD = 3; // ✅
-  private readonly LOW_RATING_MIN_COUNT = 3; // ✅
+  private readonly FEEDBACK_THRESHOLDS = [5, 10, 25]; 
+  private readonly LOW_RATING_THRESHOLD = 3; 
+  private readonly LOW_RATING_MIN_COUNT = 3; 
 
   async createFeedback(
     userId: number,
     dto: { event_id: number; rating: number; comment?: string },
   ) {
-    // 1) Event există?
+    
     const ev = await this.prisma.events.findUnique({
       where: { id_event: dto.event_id },
       select: {
@@ -44,9 +44,10 @@ export class FeedbackService {
 
     // 2) Evenimentul trebuie să fi trecut
     const now = new Date();
-    if (ev.date_start >= now) {
+    // Permitem feedback DUPĂ CE A ÎNCEPUT
+    if (now < ev.date_start) {
       throw new BadRequestException(
-        'Poți lăsa feedback doar după ce evenimentul a avut loc',
+        'Poți lăsa feedback doar după ce evenimentul a început',
       );
     }
 
@@ -72,14 +73,14 @@ export class FeedbackService {
           comment: dto.comment ?? null,
         },
       });
-      // ✅ NOTIFICĂRI organizer (per event)
+
       if (ev.organizer_id) {
-        // 1) câte feedback-uri are evenimentul acum
+        
         const feedbackCount = await this.prisma.feedback.count({
           where: { event_id: ev.id_event },
         });
 
-        // 2) avg rating
+       
         const agg = await this.prisma.feedback.aggregate({
           where: { event_id: ev.id_event },
           _avg: { rating: true },
@@ -87,7 +88,7 @@ export class FeedbackService {
 
         const avgRating = agg._avg.rating ?? 0;
 
-        // A) primul feedback
+      
         if (feedbackCount === 1) {
           await this.notificationsService.createNotification({
             userId: ev.organizer_id,
@@ -98,7 +99,7 @@ export class FeedbackService {
           });
         }
 
-        // B) praguri 5/10/25
+        
         if (this.FEEDBACK_THRESHOLDS.includes(feedbackCount)) {
           await this.notificationsService.createNotification({
             userId: ev.organizer_id,
@@ -109,7 +110,7 @@ export class FeedbackService {
           });
         }
 
-        // C) rating mic (avg <= 3) după minim 3 feedback-uri
+        
         if (
           feedbackCount >= this.LOW_RATING_MIN_COUNT &&
           avgRating <= this.LOW_RATING_THRESHOLD
@@ -126,7 +127,7 @@ export class FeedbackService {
 
       return { success: true, feedback: created };
     } catch (e) {
-      // dacă există deja feedback (unique)
+      
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
@@ -140,7 +141,6 @@ export class FeedbackService {
   }
 
   async getEventFeedback(eventId: number) {
-    // listă feedback pentru un event
     return this.prisma.feedback.findMany({
       where: { event_id: eventId },
       orderBy: { created_at: 'desc' },
@@ -174,7 +174,6 @@ export class FeedbackService {
     };
   }
   async getOrganizerEventFeedbackStats(organizerId: number, eventId: number) {
-    // 1️⃣ verificăm ownership
     const event = await this.prisma.events.findFirst({
       where: {
         id_event: eventId,
@@ -187,19 +186,19 @@ export class FeedbackService {
       throw new ForbiddenException('Nu ai acces la acest eveniment');
     }
 
-    // 2️⃣ total participanți
+  
     const totalRegistered = await this.prisma.registrations.count({
       where: { event_id: eventId },
     });
 
-    // 3️⃣ feedback agregat
+   
     const feedbackAgg = await this.prisma.feedback.aggregate({
       where: { event_id: eventId },
       _avg: { rating: true },
       _count: { rating: true },
     });
 
-    // 4️⃣ distribuție rating
+ 
     const ratingDistribution = await this.prisma.feedback.groupBy({
       by: ['rating'],
       where: { event_id: eventId },
@@ -221,30 +220,21 @@ export class FeedbackService {
     };
   }
   async getOrganizerEventFeedback(organizerId: number, eventId: number) {
-    // verificăm ownership
     const event = await this.prisma.events.findFirst({
-      where: {
-        id_event: eventId,
-        organizer_id: organizerId,
-      },
+      where: { id_event: eventId, organizer_id: organizerId },
       select: { id_event: true },
     });
 
-    if (!event) {
-      throw new ForbiddenException('Nu ai acces la acest eveniment');
-    }
+    if (!event) throw new ForbiddenException('Nu ai acces la acest eveniment');
 
     return this.prisma.feedback.findMany({
       where: { event_id: eventId },
       orderBy: { created_at: 'desc' },
-      include: {
-        users: {
-          select: {
-            id_user: true,
-            first_name: true,
-            last_name: true,
-          },
-        },
+      select: {
+        id_feedback: true,
+        rating: true,
+        comment: true,
+        created_at: true,
       },
     });
   }

@@ -14,7 +14,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: any) {
     return {
-      id: payload.sub, // ← acest câmp EXISTĂ în req.user
+      id: payload.sub, 
       role: payload.role,
       isApproved: payload.isApproved,
     };

@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '@prisma/client';
 import * as crypto from 'crypto';
+import { EventStatus } from '@prisma/client';
 
 @Injectable()
 export class RegistrationsService {
@@ -12,12 +13,10 @@ export class RegistrationsService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
   ) {}
+
   private readonly REGISTRATION_THRESHOLDS = [1];
 
-  // ================= STUDENT =================
-
   async registerStudent(userId: number, eventId: number) {
-    // 1) ia evenimentul
     const event = await this.prisma.events.findUnique({
       where: { id_event: eventId },
       select: {
@@ -30,28 +29,19 @@ export class RegistrationsService {
       },
     });
 
-    if (!event) {
-      throw new BadRequestException('Eveniment inexistent');
-    }
+    if (!event) throw new BadRequestException('Eveniment inexistent');
+    if (event.isArchived) throw new BadRequestException('Eveniment arhivat');
 
-    // (opțional, dar recomandat) nu te lăsa să te înscrii la evenimente inactive/arhivate
-    if (event.isArchived) {
-      throw new BadRequestException('Eveniment arhivat');
-    }
-
-    // 2) dacă există limită, verifică dacă e plin (înainte de create)
     if (event.max_participants) {
       const currentCount = await this.prisma.registrations.count({
         where: { event_id: eventId },
       });
-
       if (currentCount >= event.max_participants) {
         throw new BadRequestException('Evenimentul este plin');
       }
     }
 
     try {
-      // 3) creează registration
       const registration = await this.prisma.registrations.create({
         data: {
           user_id: userId,
@@ -59,30 +49,32 @@ export class RegistrationsService {
           qr_token: crypto.randomUUID(),
         },
         include: {
-          events: true,
+          events: {
+            include: {
+              files: true,
+              event_types: true,
+              users: true,
+            },
+          },
         },
       });
-      // 4️⃣ număr total înscrieri DUPĂ create
+
       const totalRegistrations = await this.prisma.registrations.count({
         where: { event_id: eventId },
       });
 
-      // 5️⃣ verificăm pragurile
       if (event.organizer_id) {
-        for (const threshold of this.REGISTRATION_THRESHOLDS) {
-          if (totalRegistrations === threshold) {
-            await this.notificationsService.createNotification({
-              userId: event.organizer_id,
-              eventId: eventId,
-              type: NotificationType.EVENT_THRESHOLD_REACHED,
-              title: 'Prag de participanți atins',
-              message: `Evenimentul "${event.title}" a ajuns la ${threshold} participanți înscriși.`,
-            });
-          }
+        if (this.REGISTRATION_THRESHOLDS.includes(totalRegistrations)) {
+          await this.notificationsService.createNotification({
+            userId: event.organizer_id,
+            eventId: eventId,
+            type: NotificationType.EVENT_THRESHOLD_REACHED,
+            title: 'Prag de participanți atins',
+            message: `Evenimentul "${event.title}" a ajuns la ${totalRegistrations} participanți înscriși.`,
+          });
         }
       }
 
-      // 🔔 NOTIFICARE: înscriere + QR (student)
       await this.notificationsService.createNotification({
         userId: userId,
         eventId: eventId,
@@ -91,59 +83,50 @@ export class RegistrationsService {
         message: `Te-ai înscris cu succes la evenimentul "${registration.events.title}". Biletul cu QR code este disponibil.`,
       });
 
-      // 4) după create: dacă s-a atins limita → notifică organizerul
-      if (event.max_participants && event.organizer_id) {
-        const countAfter = await this.prisma.registrations.count({
-          where: { event_id: eventId },
-        });
-
-        if (countAfter === event.max_participants) {
-          await this.notificationsService.createNotification({
-            userId: event.organizer_id,
-            eventId: eventId,
-            type: NotificationType.EVENT_FULL, // vezi PAS 3
-            title: 'Eveniment plin',
-            message: `Evenimentul "${event.title}" a atins numărul maxim de participanți (${event.max_participants}).`,
-          });
-        }
-      }
-
       return registration;
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       ) {
-        throw new BadRequestException(
-          'You are already registered for this event',
-        );
+        throw new BadRequestException('Ești deja înscris la acest eveniment');
       }
       throw e;
     }
   }
 
+  async getMyRegistrations(userId: number) {
+    return this.prisma.registrations.findMany({
+      where: { user_id: userId },
+      include: {
+        events: {
+          include: {
+            files: true, // 👈 Aici stau pozele
+            event_types: true, // Pentru categorie
+            users: true, // Pentru organizator
+            faculties: true,
+          },
+        },
+      },
+      orderBy: {
+        id_registration: 'desc',
+      },
+    });
+  }
+
   async unregisterStudent(userId: number, eventId: number) {
     const registration = await this.prisma.registrations.findFirst({
-      where: {
-        user_id: userId,
-        event_id: eventId,
-      },
-      include: {
-        events: true,
-      },
+      where: { user_id: userId, event_id: eventId },
+      include: { events: true },
     });
 
-    if (!registration) {
+    if (!registration)
       throw new BadRequestException('Nu ești înscris la acest eveniment');
-    }
 
     await this.prisma.registrations.delete({
-      where: {
-        id_registration: registration.id_registration,
-      },
+      where: { id_registration: registration.id_registration },
     });
 
-    // 🔔 notificare student
     await this.notificationsService.createNotification({
       userId,
       eventId,
@@ -151,43 +134,9 @@ export class RegistrationsService {
       title: 'Retragere confirmată',
       message: `Te-ai retras de la evenimentul "${registration.events.title}".`,
     });
-    // DUPĂ delete
-    const countAfter = await this.prisma.registrations.count({
-      where: { event_id: eventId },
-    });
-
-    const event = registration.events;
-
-    // dacă înainte era plin și acum nu mai e
-    if (
-      event.max_participants &&
-      countAfter === event.max_participants - 1 &&
-      event.organizer_id
-    ) {
-      await this.notificationsService.createNotification({
-        userId: event.organizer_id,
-        eventId,
-        type: NotificationType.EVENT_UPDATED,
-        title: 'Locuri disponibile',
-        message: `Un participant s-a retras. Evenimentul "${event.title}" are din nou locuri disponibile.`,
-      });
-    }
 
     return { message: 'Retragere realizată cu succes' };
   }
-
-  async getMyRegistrations(userId: number) {
-    return this.prisma.registrations.findMany({
-      where: {
-        user_id: userId,
-      },
-      include: {
-        events: true,
-      },
-    });
-  }
-
-  // ================= ORGANIZER =================
 
   async getParticipants(
     organizerId: number,
@@ -196,24 +145,14 @@ export class RegistrationsService {
   ) {
     const where: any = {
       event_id: eventId,
-      events: {
-        organizer_id: organizerId,
-      },
+      events: { organizer_id: organizerId },
     };
-
-    if (status === 'checked-in') {
-      where.checked_in = true;
-    }
-
-    if (status === 'absent') {
-      where.checked_in = false;
-    }
+    if (status === 'checked-in') where.checked_in = true;
+    if (status === 'absent') where.checked_in = false;
 
     return this.prisma.registrations.findMany({
       where,
-      include: {
-        users: true,
-      },
+      include: { users: true },
     });
   }
 
@@ -222,36 +161,20 @@ export class RegistrationsService {
     eventId: number,
     qrToken: string,
   ) {
-    // 1️⃣ cautăm înregistrarea
     const registration = await this.prisma.registrations.findFirst({
       where: {
         event_id: eventId,
         qr_token: qrToken,
-        events: {
-          organizer_id: organizerId,
-        },
+        events: { organizer_id: organizerId },
       },
     });
 
-    if (!registration) {
-      throw new BadRequestException(
-        'QR invalid sau nu aparține acestui eveniment',
-      );
-    }
+    if (!registration) throw new BadRequestException('QR invalid');
+    if (registration.checked_in) throw new BadRequestException('Deja prezent');
 
-    // 2️⃣ verificăm dacă nu e deja check-in
-    if (registration.checked_in) {
-      throw new BadRequestException('Participantul este deja bifat ca prezent');
-    }
-
-    // 3️⃣ facem check-in
     const updated = await this.prisma.registrations.update({
-      where: {
-        id_registration: registration.id_registration,
-      },
-      data: {
-        checked_in: true,
-      },
+      where: { id_registration: registration.id_registration },
+      data: { checked_in: true },
     });
 
     return {
@@ -262,55 +185,36 @@ export class RegistrationsService {
 
   async exportParticipantsCsv(organizerId: number, eventId: number) {
     const participants = await this.prisma.registrations.findMany({
-      where: {
-        event_id: eventId,
-        events: {
-          organizer_id: organizerId,
-        },
-      },
-      include: {
-        users: true,
-      },
+      where: { event_id: eventId, events: { organizer_id: organizerId } },
+      include: { users: true },
     });
 
-    const header = 'Last Name,First Name,Email,Checked In\n';
+    const delimiter = ';';
+    const bom = '\uFEFF';
+    const header = `Nume${delimiter}Prenume${delimiter}Email${delimiter}Status Check-In\n`;
     const rows = participants
-      .map(
-        (p) =>
-          `${p.users.last_name},${p.users.first_name},${p.users.email},${
-            p.checked_in ? 'YES' : 'NO'
-          }`,
-      )
+      .map((p) => {
+        const lastName = (p.users.last_name || '').replace(/;/g, ' ');
+        const firstName = (p.users.first_name || '').replace(/;/g, ' ');
+        const email = (p.users.email || '').replace(/;/g, ' ');
+        return `${lastName}${delimiter}${firstName}${delimiter}${email}${delimiter}${p.checked_in ? 'PREZENT' : 'ABSENT'}`;
+      })
       .join('\n');
 
-    return header + rows;
+    return bom + `sep=${delimiter}\n` + header + rows;
   }
-
-  // ================= ✅ STATISTICI PARTICIPARE =================
 
   async getEventParticipationStats(organizerId: number, eventId: number) {
     const event = await this.prisma.events.findFirst({
-      where: {
-        id_event: eventId,
-        organizer_id: organizerId,
-      },
+      where: { id_event: eventId, organizer_id: organizerId },
     });
-
-    if (!event) {
-      throw new ForbiddenException('Nu ai acces la acest eveniment');
-    }
+    if (!event) throw new ForbiddenException('Acces refuzat');
 
     const totalRegistered = await this.prisma.registrations.count({
-      where: {
-        event_id: eventId,
-      },
+      where: { event_id: eventId },
     });
-
     const totalCheckedIn = await this.prisma.registrations.count({
-      where: {
-        event_id: eventId,
-        checked_in: true,
-      },
+      where: { event_id: eventId, checked_in: true },
     });
 
     return {
@@ -318,6 +222,49 @@ export class RegistrationsService {
       totalRegistered,
       totalCheckedIn,
       totalAbsent: totalRegistered - totalCheckedIn,
+    };
+  }
+
+  async getStudentDashboardStats(userId: number) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const regs = await this.prisma.registrations.findMany({
+      where: { user_id: userId },
+      include: {
+        events: {
+          select: {
+            id_event: true,
+            date_start: true,
+            duration: true,
+            status: true,
+            isArchived: true,
+          },
+        },
+      },
+    });
+
+    const enrolledEvents = regs
+      .map((r) => r.events)
+      .filter(Boolean)
+      .filter((e) => e.status === EventStatus.active && !e.isArchived);
+
+    const upcoming = enrolledEvents.filter(
+      (e) => new Date(e.date_start) >= today,
+    );
+    const completed = enrolledEvents.filter(
+      (e) => new Date(e.date_start) < today,
+    );
+    const totalHours = completed.reduce(
+      (sum, e) => sum + (Number(e.duration) || 0),
+      0,
+    );
+
+    return {
+      enrolledEvents: enrolledEvents.length,
+      upcomingEvents: upcoming.length,
+      completedEvents: completed.length,
+      totalHours,
     };
   }
 }

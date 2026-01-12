@@ -1,19 +1,24 @@
-import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  UseGuards,
+} from '@nestjs/common';
 import { FacultiesService } from './faculties.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('faculties')
 export class FacultiesController {
   constructor(private readonly facultiesService: FacultiesService) {}
 
-  // GET /faculties
   @Get()
-  findAll() {
+  async findAll() {
     return this.facultiesService.findAll();
   }
 
-  // GET /faculties/:id/specializations
   @Get(':id/specializations')
-  findSpecializations(@Param('id', ParseIntPipe) id_faculty: number) {
+  async findSpecializations(@Param('id', ParseIntPipe) id_faculty: number) {
     return this.facultiesService.findSpecializationsByFaculty(id_faculty);
   }
 }

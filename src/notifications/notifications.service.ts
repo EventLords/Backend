@@ -164,7 +164,6 @@ export class NotificationsService {
     return { success: true };
   }
 
-  // ➕ SAFE ADD
   async markAllAsRead(userId: number) {
     await this.prisma.notifications.updateMany({
       where: {
@@ -184,7 +183,7 @@ export class NotificationsService {
    */
   async createNotification(data: {
     userId: number;
-    eventId?: number;
+    eventId?: number | null;
     type: NotificationType;
     title: string;
     message: string;
@@ -198,5 +197,26 @@ export class NotificationsService {
         message: data.message,
       },
     });
+  }
+
+  async deleteOne(userId: number, notificationId: number) {
+    const result = await this.prisma.notifications.deleteMany({
+      where: {
+        id_notification: notificationId,
+        user_id: userId, // Security check
+      },
+    });
+
+    return { success: result.count > 0 };
+  }
+
+  async deleteAll(userId: number) {
+    const result = await this.prisma.notifications.deleteMany({
+      where: {
+        user_id: userId,
+      },
+    });
+
+    return { success: true, count: result.count };
   }
 }

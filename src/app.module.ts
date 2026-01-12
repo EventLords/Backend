@@ -15,12 +15,11 @@ import { RecommendationsModule } from './recommendations/recommendations.module'
 import { FeedbackModule } from './feedback/feedback.module';
 import { FilesModule } from './files/files.module';
 import { AdminReportsModule } from './admin-reports/admin-reports.module';
+import { ProfileModule } from './profile/profile.module';
 @Module({
   imports: [
-    // 🔹 CRON / SCHEDULER (OBLIGATORIU pentru remindere)
+  
     ScheduleModule.forRoot(),
-
-    // 🔹 MODULE DE BAZĂ
     PrismaModule,
     AuthModule,
     AdminModule,
@@ -31,7 +30,7 @@ import { AdminReportsModule } from './admin-reports/admin-reports.module';
     FeedbackModule,
     FilesModule,
     AdminReportsModule,
-    // 🔔 NOTIFICĂRI (favorite reminders + clopoțel)
+    ProfileModule,
     NotificationsModule,
   ],
   controllers: [AppController],

@@ -6,10 +6,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 import { PrismaModule } from 'src/prisma/prisma.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-    NotificationsModule, // ✅ OBLIGATORIU
-  ],
+  imports: [PrismaModule, NotificationsModule],
   controllers: [EventsController],
   providers: [EventsService],
 })

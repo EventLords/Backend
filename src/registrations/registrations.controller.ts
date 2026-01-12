@@ -23,8 +23,6 @@ import type { Response } from 'express';
 export class RegistrationsController {
   constructor(private readonly service: RegistrationsService) {}
 
-  // ================= STUDENT =================
-
   @Post('events/:id')
   @Roles('STUDENT')
   register(@Req() req, @Param('id', ParseIntPipe) eventId: number) {
@@ -42,8 +40,11 @@ export class RegistrationsController {
   getMyRegistrations(@Req() req) {
     return this.service.getMyRegistrations(req.user.id);
   }
-
-  // ================= ORGANIZER =================
+  @Get('me/stats')
+  @Roles('STUDENT')
+  getMyStats(@Req() req) {
+    return this.service.getStudentDashboardStats(req.user.id);
+  }
 
   @Get('events/:id/participants')
   @Roles('ORGANIZER')
@@ -92,7 +93,6 @@ export class RegistrationsController {
     res.send(csv);
   }
 
-  // ✅ NOU – STATISTICI PARTICIPARE (FĂRĂ A STRICA NIMIC)
   @Get('events/:id/stats')
   @Roles('ORGANIZER')
   getEventStats(@Req() req, @Param('id', ParseIntPipe) eventId: number) {
