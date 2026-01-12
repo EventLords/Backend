@@ -1,0 +1,243 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model admin_actions {
+  id_action   Int       @id @default(autoincrement())
+  admin_id    Int?
+  event_id    Int?
+  action_type String?   @db.VarChar(50)
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+  users       users?    @relation(fields: [admin_id], references: [id_user])
+  events      events?   @relation(fields: [event_id], references: [id_event])
+}
+
+model event_types {
+  id_type Int      @id @default(autoincrement())
+  name    String   @db.VarChar(50)
+  events  events[]
+}
+
+model events {
+  id_event               Int                      @id @default(autoincrement())
+  title                  String
+  description            String?
+  date_start             DateTime
+  deadline               DateTime
+  location               String
+  faculty_id             Int?
+  type_id                Int?
+  organizer_id           Int?
+  status                 EventStatus              @default(draft)
+  max_participants       Int?
+  created_at             DateTime?                @default(now())
+  duration               String?
+  isArchived             Boolean                  @default(false)
+  admin_actions          admin_actions[]
+  faculties              faculties?               @relation(fields: [faculty_id], references: [id_faculty])
+  users                  users?                   @relation(fields: [organizer_id], references: [id_user])
+  event_types            event_types?             @relation(fields: [type_id], references: [id_type])
+  favorite_events        favorite_events[]
+  feedback               feedback[]
+  files                  files[]
+  notifications          notifications[]
+  recommendation_history recommendation_history[]
+  registrations          registrations[]
+  rejection_reason       String?
+}
+
+model faculties {
+  id_faculty      Int               @id @default(autoincrement())
+  name            String            @db.VarChar(100)
+  events          events[]
+  specializations specializations[]
+  users           users[]
+}
+
+model favorite_events {
+  id_favorite Int       @id @default(autoincrement())
+  user_id     Int?
+  event_id    Int?
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+  events      events?   @relation(fields: [event_id], references: [id_event])
+  users       users?    @relation(fields: [user_id], references: [id_user])
+
+  @@unique([user_id, event_id])
+}
+
+model feedback {
+  id_feedback Int       @id @default(autoincrement())
+  event_id    Int
+  user_id     Int
+  rating      Int?
+  comment     String?
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+  events      events?   @relation(fields: [event_id], references: [id_event])
+  users       users?    @relation(fields: [user_id], references: [id_user])
+
+  @@unique([user_id, event_id], map: "uq_feedback_user_event")
+}
+
+
+model files {
+  id_file     Int       @id @default(autoincrement())
+  event_id    Int
+  file_path   String
+  uploaded_at DateTime? @default(now())
+  is_cover    Boolean   @default(false)
+  events      events    @relation(fields: [event_id], references: [id_event])
+}
+
+model recommendation_history {
+  id_record  Int       @id @default(autoincrement())
+  user_id    Int?
+  event_id   Int?
+  action     String?   @db.VarChar(50)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  events     events?   @relation(fields: [event_id], references: [id_event])
+  users      users?    @relation(fields: [user_id], references: [id_user])
+}
+
+model registrations {
+  id_registration   Int       @id @default(autoincrement())
+  event_id          Int
+  user_id           Int
+  registration_date DateTime? @default(now()) @db.Timestamp(6)
+  qr_token          String    @unique @db.VarChar(255)
+  checked_in        Boolean   @default(false)
+  events            events    @relation(fields: [event_id], references: [id_event])
+  users             users     @relation(fields: [user_id], references: [id_user])
+
+  @@unique([event_id, user_id])
+}
+
+model specializations {
+  id_specialization Int       @id @default(autoincrement())
+  name              String    @db.VarChar(150)
+  study_cycle       String    @db.VarChar(20)
+  faculty_id        Int
+  faculties         faculties @relation(fields: [faculty_id], references: [id_faculty])
+  users             users[]
+}
+
+model users {
+  id_user                  Int                      @id @default(autoincrement())
+  email                    String                   @unique @db.VarChar(100)
+  password_hash            String                   @db.VarChar(255)
+  role                     String                   @db.VarChar(20)
+  faculty_id               Int?
+  study_cycle              String?                  @db.VarChar(20)
+  specialization_id        Int?
+  study_year               Int?
+  created_at               DateTime?                @default(now()) @db.Timestamp(6)
+  isApproved               Boolean?                 @default(false)
+  organization_description String?
+  organization_name        String?                  @db.VarChar(150)
+  organization_type        String?                  @db.VarChar(50)
+  phone                    String?                  @db.VarChar(20)
+  last_name                String?                  @db.VarChar(20)
+  first_name               String?                  @db.VarChar(20)
+  isRejected               Boolean?                 @default(false)
+  admin_actions            admin_actions[]
+  events                   events[]
+  favorite_events          favorite_events[]
+  feedback                 feedback[]
+  notifications            notifications[]
+  recommendation_history   recommendation_history[]
+  registrations            registrations[]
+  faculties                faculties?               @relation(fields: [faculty_id], references: [id_faculty])
+  specializations          specializations?         @relation(fields: [specialization_id], references: [id_specialization])
+  rejection_reason         String?
+}
+
+model notifications {
+  id_notification Int              @id @default(autoincrement())
+  user_id         Int
+  event_id        Int?
+  type            NotificationType
+  title           String           @db.VarChar(200)
+  message         String
+  created_at      DateTime?        @default(now()) @db.Timestamp(6)
+  read_at         DateTime?        @db.Timestamp(6)
+  events          events?          @relation(fields: [event_id], references: [id_event], onUpdate: NoAction, map: "fk_notifications_event")
+  users           users            @relation(fields: [user_id], references: [id_user], onDelete: Cascade, onUpdate: NoAction, map: "fk_notifications_user")
+
+  @@index([user_id, created_at], map: "idx_notifications_user_created")
+  @@index([user_id, read_at], map: "idx_notifications_user_read")
+}
+
+model reminder_logs {
+  id_log   Int              @id @default(autoincrement())
+  user_id  Int
+  event_id Int
+  type     NotificationType
+  sent_at  DateTime?        @default(now()) @db.Timestamp(6)
+
+  @@unique([user_id, event_id, type], map: "uq_reminder")
+}
+
+enum EventStatus {
+  draft
+  active
+  inactive
+  pending
+  rejected
+}
+
+enum NotificationType {
+  // ACCOUNT
+  ACCOUNT_CREATED
+  ACCOUNT_APPROVED
+  ACCOUNT_REJECTED
+
+  // EVENTS – lifecycle
+  EVENT_CREATED
+  EVENT_UPDATED
+  EVENT_DELETED
+  EVENT_SUBMITTED_FOR_REVIEW
+  EVENT_APPROVED
+  EVENT_REJECTED
+  EVENT_RECOMMENDED
+  EVENT_FULL
+  EVENT_THRESHOLD_REACHED
+  EVENT_FEEDBACK_STARTED
+  EVENT_FEEDBACK_THRESHOLD_REACHED
+  EVENT_FEEDBACK_LOW_RATING
+  
+
+  // REGISTRATIONS
+  EVENT_REGISTERED
+  EVENT_UNREGISTERED
+  REGISTRATION_CANCELLED
+  CHECKIN_DONE
+
+  // FILES & MEDIA
+  FILE_UPLOADED
+  FILE_DELETED
+  COVER_SET
+  UPLOAD_FAILED
+
+  // FEEDBACK & STATS
+  FEEDBACK_RECEIVED
+  FEEDBACK_REQUESTED
+  STATS_AVAILABLE
+
+  // FAVORITES & REMINDERS
+  EVENT_FAVORITED
+  FAVORITE_REMINDER_24H
+  FAVORITE_REMINDER_1H
+
+  // SYSTEM
+  EXPORT_DONE
+  PERMISSION_DENIED
+
+  // ADMIN – ACTION REQUIRED
+  ADMIN_EVENT_PENDING
+  ADMIN_ORGANIZER_PENDING
+
+}
